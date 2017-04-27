@@ -2,7 +2,7 @@ import os
 import scipy.misc
 import numpy as np
 
-from model_new import DCGAN
+from model import DCGAN
 from utils import pp, visualize, to_json, show_all_variables
 
 import tensorflow as tf
@@ -59,7 +59,6 @@ def main(_):
                 output_height=FLAGS.output_height,
                 batch_size=FLAGS.batch_size,
                 sample_num=FLAGS.batch_size,
-                y_dim=10,
                 dataset_name=FLAGS.dataset,
                 bluffing_rate=FLAGS.bluffing_rate,
                 input_fname_pattern=FLAGS.input_fname_pattern,
