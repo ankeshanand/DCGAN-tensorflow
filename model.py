@@ -108,8 +108,9 @@ class DCGAN(object):
         if self.y_dim:
             self.G = self.generator(self.z, self.y)
             n_bluffs = int(self.bluffing_rate * self.batch_size)
-            G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size - n_bluffs])
-            inputs = tf.concat([inputs, G_bluffed], axis=0)
+            if n_bluffs != 0:
+              G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size - n_bluffs])
+              inputs = tf.concat([inputs, G_bluffed], axis=0)
             self.D, self.D_logits = \
                 self.discriminator(inputs, self.y, reuse=False)
 
@@ -119,8 +120,9 @@ class DCGAN(object):
         else:
             self.G = self.generator(self.z)
             n_bluffs = int(self.bluffing_rate * self.batch_size)
-            G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size - n_bluffs])
-            inputs = tf.concat([inputs, G_bluffed], axis=0)
+            if n_bluffs != 0:
+              G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size - n_bluffs])
+              inputs = tf.concat([inputs, G_bluffed], axis=0)
             self.D, self.D_logits = self.discriminator(inputs)
 
             self.sampler = self.sampler(self.z)
