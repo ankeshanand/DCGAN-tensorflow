@@ -18,7 +18,7 @@ class DCGAN(object):
     def __init__(self, sess, input_height=108, input_width=108, crop=True,
                  batch_size=64, sample_num=64, output_height=64, output_width=64,
                  y_dim=None, z_dim=100, gf_dim=64, df_dim=64, br_initial=0.0,
-                 anneal_rate=0.0001, gfc_dim=1024, dfc_dim=1024, c_dim=3,
+                 anneal_rate=0.0002, gfc_dim=1024, dfc_dim=1024, c_dim=3,
                  dataset_name='default', input_fname_pattern='*.jpg', checkpoint_dir=None,
                  sample_dir=None):
         """
@@ -175,7 +175,7 @@ class DCGAN(object):
                                     self.G_sum, self.d_loss_fake_sum, self.g_loss_sum])
         self.d_sum = merge_summary(
             [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
-        self.writer = SummaryWriter("./logs/{0}/bluff={1}".format(self.dataset_name, self.bluffing_rate), self.sess.graph)
+        self.writer = SummaryWriter("./logs/{0}/bluff={1}_anneal={2}".format(self.dataset_name, self.bluffing_rate, self.anneal_rate), self.sess.graph)
 
         sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
 
