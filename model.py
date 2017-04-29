@@ -339,7 +339,7 @@ class DCGAN(object):
                 h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim * 2, name='d_h1_conv')))
                 h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim * 4, name='d_h2_conv')))
                 h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim * 8, name='d_h3_conv')))
-                h4 = linear(tf.reshape(h3, [image.get_shape().as_list()[0], -1]), 1, 'd_h3_lin')
+                h4 = linear(tf.reshape(h3, [-1, 2048]), 1, 'd_h3_lin')
 
                 return tf.nn.sigmoid(h4), h4
             else:
