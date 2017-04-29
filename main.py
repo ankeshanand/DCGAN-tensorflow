@@ -11,7 +11,7 @@ flags = tf.app.flags
 flags.DEFINE_integer("epoch", 25, "Epoch to train [25]")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
-flags.DEFINE_float("bluffing_rate", 0.0, "Bluffing Rate")
+flags.DEFINE_float("br_initial", 0.0, "Initial Bluffing Rate")
 flags.DEFINE_integer("train_size", np.inf, "The size of train images [np.inf]")
 flags.DEFINE_integer("batch_size", 64, "The size of batch images [64]")
 flags.DEFINE_integer("input_height", 108, "The size of image to use (will be center cropped). [108]")
@@ -31,8 +31,8 @@ FLAGS = flags.FLAGS
 
 
 def main(_):
-    FLAGS.sample_dir = FLAGS.sample_dir + "/" + FLAGS.dataset + "/bluff-" + str(FLAGS.bluffing_rate)
-    FLAGS.checkpoint_dir = FLAGS.checkpoint_dir + "/" + FLAGS.dataset + "/bluff-" + str(FLAGS.bluffing_rate)
+    FLAGS.sample_dir = FLAGS.sample_dir + "/" + FLAGS.dataset + "/bluff-" + str(FLAGS.br_initial)
+    FLAGS.checkpoint_dir = FLAGS.checkpoint_dir + "/" + FLAGS.dataset + "/bluff-" + str(FLAGS.br_initial)
     pp.pprint(flags.FLAGS.__flags)
 
     if FLAGS.input_width is None:
@@ -60,7 +60,7 @@ def main(_):
                 batch_size=FLAGS.batch_size,
                 sample_num=FLAGS.batch_size,
                 dataset_name=FLAGS.dataset,
-                bluffing_rate=FLAGS.bluffing_rate,
+                br_initial=FLAGS.br_initial,
                 input_fname_pattern=FLAGS.input_fname_pattern,
                 crop=FLAGS.crop,
                 checkpoint_dir=FLAGS.checkpoint_dir,
@@ -75,7 +75,7 @@ def main(_):
                 batch_size=FLAGS.batch_size,
                 sample_num=FLAGS.batch_size,
                 dataset_name=FLAGS.dataset,
-                bluffing_rate=FLAGS.bluffing_rate,
+                br_initial=FLAGS.br_initial,
                 input_fname_pattern=FLAGS.input_fname_pattern,
                 crop=FLAGS.crop,
                 checkpoint_dir=FLAGS.checkpoint_dir,

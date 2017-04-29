@@ -17,9 +17,10 @@ def conv_out_size_same(size, stride):
 class DCGAN(object):
     def __init__(self, sess, input_height=108, input_width=108, crop=True,
                  batch_size=64, sample_num=64, output_height=64, output_width=64,
-                 y_dim=None, z_dim=100, gf_dim=64, df_dim=64, bluffing_rate=0.0,
-                 gfc_dim=1024, dfc_dim=1024, c_dim=3, dataset_name='default',
-                 input_fname_pattern='*.jpg', checkpoint_dir=None, sample_dir=None):
+                 y_dim=None, z_dim=100, gf_dim=64, df_dim=64, br_initial=0.0,
+                 anneal_rate=0.0001, gfc_dim=1024, dfc_dim=1024, c_dim=3,
+                 dataset_name='default', input_fname_pattern='*.jpg', checkpoint_dir=None,
+                 sample_dir=None):
         """
 
     Args:
@@ -44,7 +45,8 @@ class DCGAN(object):
         self.output_height = output_height
         self.output_width = output_width
 
-        self.bluffing_rate = bluffing_rate
+        self.br_initial = br_initial
+        self.anneal_rate = anneal_rate
 
         self.y_dim = y_dim
         self.z_dim = z_dim
@@ -104,10 +106,11 @@ class DCGAN(object):
         self.z = tf.placeholder(
             tf.float32, [None, self.z_dim], name='z')
         self.z_sum = histogram_summary("z", self.z)
+        self.bluffing_rate = tf.Variable(self.br_initial, name="bluffing_rate")
 
         if self.y_dim:
+            n_bluffs = tf.to_int32(tf.multiply(self.bluffing_rate, self.batch_size))
             self.G = self.generator(self.z, self.y)
-            n_bluffs = int(self.bluffing_rate * self.batch_size)
             G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size - n_bluffs])
             inputs = tf.concat([inputs, G_bluffed], axis=0)
             self.D, self.D_logits = \
@@ -118,7 +121,7 @@ class DCGAN(object):
                 self.discriminator(self.G, self.y, reuse=True)
         else:
             self.G = self.generator(self.z)
-            n_bluffs = int(self.bluffing_rate * self.batch_size)
+            n_bluffs = tf.to_int32(tf.multiply(self.bluffing_rate, self.batch_size))
             G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size - n_bluffs])
             inputs = tf.concat([inputs, G_bluffed], axis=0)
             self.D, self.D_logits = self.discriminator(inputs)
@@ -235,10 +238,12 @@ class DCGAN(object):
 
                 if config.dataset == 'mnist':
                     # Update D network
+                    bluffing_rate = self.br_initial * np.exp(-self.anneal_rate * counter)
                     _, summary_str = self.sess.run([d_optim, self.d_sum],
                                                    feed_dict={
                                                        self.inputs: batch_images,
                                                        self.z: batch_z,
+                                                       self.bluffing_rate: bluffing_rate
                                                    })
                     self.writer.add_summary(summary_str, counter)
 
@@ -246,12 +251,13 @@ class DCGAN(object):
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
                                                    feed_dict={
                                                        self.z: batch_z,
+                                                       self.bluffing_rate: bluffing_rate
                                                    })
                     self.writer.add_summary(summary_str, counter)
 
                     # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
                     _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={self.z: batch_z})
+                                                   feed_dict={self.z: batch_z, self.bluffing_rate: bluffing_rate})
                     self.writer.add_summary(summary_str, counter)
 
                     errD_fake = self.d_loss_fake.eval({
