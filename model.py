@@ -175,7 +175,7 @@ class DCGAN(object):
                                     self.G_sum, self.d_loss_fake_sum, self.g_loss_sum])
         self.d_sum = merge_summary(
             [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
-        self.writer = SummaryWriter("./logs/{0}/bluff={1}_anneal={2}".format(self.dataset_name, self.bluffing_rate, self.anneal_rate), self.sess.graph)
+        self.writer = SummaryWriter("./logs/{0}/bluff={1}_anneal={2}".format(self.dataset_name, self.br_initial, self.anneal_rate), self.sess.graph)
 
         sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
 
@@ -236,59 +236,39 @@ class DCGAN(object):
                 batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
                     .astype(np.float32)
 
-                if config.dataset == 'mnist':
-                    # Update D network
-                    bluffing_rate = self.br_initial * np.exp(-self.anneal_rate * counter)
-                    _, summary_str = self.sess.run([d_optim, self.d_sum],
-                                                   feed_dict={
-                                                       self.inputs: batch_images,
-                                                       self.z: batch_z,
-                                                       self.bluffing_rate: bluffing_rate
-                                                   })
-                    self.writer.add_summary(summary_str, counter)
+                # Update D network
+                bluffing_rate = self.br_initial * np.exp(-self.anneal_rate * counter)
+                _, summary_str = self.sess.run([d_optim, self.d_sum],
+                                               feed_dict={
+                                                   self.inputs: batch_images,
+                                                   self.z: batch_z,
+                                                   self.bluffing_rate: bluffing_rate
+                                               })
+                self.writer.add_summary(summary_str, counter)
 
-                    # Update G network
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={
-                                                       self.z: batch_z,
-                                                       self.bluffing_rate: bluffing_rate
-                                                   })
-                    self.writer.add_summary(summary_str, counter)
+                # Update G network
+                _, summary_str = self.sess.run([g_optim, self.g_sum],
+                                               feed_dict={
+                                                   self.z: batch_z,
+                                                   self.bluffing_rate: bluffing_rate
+                                               })
+                self.writer.add_summary(summary_str, counter)
 
-                    # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={self.z: batch_z, self.bluffing_rate: bluffing_rate})
-                    self.writer.add_summary(summary_str, counter)
+                # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
+                _, summary_str = self.sess.run([g_optim, self.g_sum],
+                                               feed_dict={self.z: batch_z, self.bluffing_rate: bluffing_rate})
+                self.writer.add_summary(summary_str, counter)
 
-                    errD_fake = self.d_loss_fake.eval({
-                        self.z: batch_z,
-                    })
-                    errD_real = self.d_loss_real.eval({
-                        self.inputs: batch_images,
-                        self.z: batch_z
-                    })
-                    errG = self.g_loss.eval({
-                        self.z: batch_z,
-                    })
-                else:
-                    # Update D network
-                    _, summary_str = self.sess.run([d_optim, self.d_sum],
-                                                   feed_dict={self.inputs: batch_images, self.z: batch_z})
-                    self.writer.add_summary(summary_str, counter)
-
-                    # Update G network
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={self.z: batch_z})
-                    self.writer.add_summary(summary_str, counter)
-
-                    # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-                    _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                                   feed_dict={self.z: batch_z})
-                    self.writer.add_summary(summary_str, counter)
-
-                    errD_fake = self.d_loss_fake.eval({self.z: batch_z})
-                    errD_real = self.d_loss_real.eval({self.inputs: batch_images})
-                    errG = self.g_loss.eval({self.z: batch_z})
+                errD_fake = self.d_loss_fake.eval({
+                    self.z: batch_z,
+                })
+                errD_real = self.d_loss_real.eval({
+                    self.inputs: batch_images,
+                    self.z: batch_z
+                })
+                errG = self.g_loss.eval({
+                    self.z: batch_z,
+                })
 
                 counter += 1
                 print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
@@ -296,7 +276,7 @@ class DCGAN(object):
                          time.time() - start_time, errD_fake + errD_real, errG))
 
                 if np.mod(counter, 100) == 1:
-                    if config.dataset == 'mnist':
+                    try:
                         samples, d_loss, g_loss = self.sess.run(
                             [self.sampler, self.d_loss, self.g_loss],
                             feed_dict={
@@ -309,22 +289,8 @@ class DCGAN(object):
                         save_images(samples, [manifold_h, manifold_w],
                                     './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
                         print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss))
-                    else:
-                        try:
-                            samples, d_loss, g_loss = self.sess.run(
-                                [self.sampler, self.d_loss, self.g_loss],
-                                feed_dict={
-                                    self.z: sample_z,
-                                    self.inputs: sample_inputs,
-                                },
-                            )
-                            manifold_h = int(np.ceil(np.sqrt(samples.shape[0])))
-                            manifold_w = int(np.floor(np.sqrt(samples.shape[0])))
-                            save_images(samples, [manifold_h, manifold_w],
-                                        './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
-                            print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss))
-                        except:
-                            print("one pic error!...")
+                    except:
+                        print("one pic error!...")
 
                 if np.mod(counter, 500) == 2:
                     self.save(config.checkpoint_dir, counter)
@@ -339,7 +305,15 @@ class DCGAN(object):
                 h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim * 2, name='d_h1_conv')))
                 h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim * 4, name='d_h2_conv')))
                 h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim * 8, name='d_h3_conv')))
-                h4 = linear(tf.reshape(h3, [-1, 2048]), 1, 'd_h3_lin')
+
+                # HACK: Hard-coded in based on input image sized used for each dataset instead of the more
+                # complex route of using a batchsize tf variable (deriving it form the shape wouldn't work,
+                # because of a tf bug that returns a vector of Nones for shapes after a split; though 
+                # deriving it from self.input_height is an option, if slightly more complicated)
+                if self.input_height == 28:
+                    h4 = linear(tf.reshape(h3, [-1, 2048]), 1, 'd_h3_lin')
+                elif self.input_height == 108:
+                    h4 = linear(tf.reshape(h3, [-1, 8192]), 1, 'd_h3_lin')
 
                 return tf.nn.sigmoid(h4), h4
             else:
