@@ -22,6 +22,7 @@ flags.DEFINE_integer("output_height", 64, "The size of the output images to prod
 flags.DEFINE_integer("output_width", None,
                      "The size of the output images to produce. If None, same value as output_height [None]")
 flags.DEFINE_string("dataset", "celebA", "The name of dataset [celebA, mnist, lsun]")
+flags.DEFINE_string("architecture", "dcgan", "The name of architecture [dcgan, wgan, wgan-gp]")
 flags.DEFINE_string("input_fname_pattern", "*.jpg", "Glob pattern of filename of input images [*]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoint]")
 flags.DEFINE_string("sample_dir", "samples", "Directory name to save the image samples [samples]")
@@ -32,8 +33,8 @@ FLAGS = flags.FLAGS
 
 
 def main(_):
-    FLAGS.sample_dir = FLAGS.sample_dir + "/" + FLAGS.dataset + "/bluff-" + str(FLAGS.br_initial) + "_anneal-" + str(FLAGS.anneal_rate)
-    FLAGS.checkpoint_dir = FLAGS.checkpoint_dir + "/" + FLAGS.dataset + "/bluff-" + str(FLAGS.br_initial) + "_anneal-" + str(FLAGS.anneal_rate)
+    FLAGS.sample_dir = FLAGS.sample_dir + "/" + FLAGS.dataset + "/" + FLAGS.architecture + "_bluff-" + str(FLAGS.br_initial) + "_anneal-" + str(FLAGS.anneal_rate)
+    FLAGS.checkpoint_dir = FLAGS.checkpoint_dir + "/" + FLAGS.dataset + "/" + FLAGS.architecture + "_bluff-" + str(FLAGS.br_initial) + "_anneal-" + str(FLAGS.anneal_rate)
     pp.pprint(flags.FLAGS.__flags)
 
     if FLAGS.input_width is None:
@@ -61,6 +62,7 @@ def main(_):
                 batch_size=FLAGS.batch_size,
                 sample_num=FLAGS.batch_size,
                 dataset_name=FLAGS.dataset,
+                architecture=FLAGS.architecture,
                 br_initial=FLAGS.br_initial,
                 input_fname_pattern=FLAGS.input_fname_pattern,
                 crop=FLAGS.crop,
@@ -77,6 +79,7 @@ def main(_):
                 batch_size=FLAGS.batch_size,
                 sample_num=FLAGS.batch_size,
                 dataset_name=FLAGS.dataset,
+                architecture=FLAGS.architecture,
                 br_initial=FLAGS.br_initial,
                 input_fname_pattern=FLAGS.input_fname_pattern,
                 crop=FLAGS.crop,

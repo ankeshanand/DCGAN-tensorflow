@@ -19,8 +19,8 @@ class DCGAN(object):
                  batch_size=64, sample_num=64, output_height=64, output_width=64,
                  y_dim=None, z_dim=100, gf_dim=64, df_dim=64, br_initial=0.0,
                  anneal_rate=0.0002, gfc_dim=1024, dfc_dim=1024, c_dim=3,
-                 dataset_name='default', input_fname_pattern='*.jpg', checkpoint_dir=None,
-                 sample_dir=None):
+                 dataset_name='default', input_fname_pattern='*.jpg', architecture='dcgan', 
+                 checkpoint_dir=None, sample_dir=None):
         """
 
     Args:
@@ -47,6 +47,7 @@ class DCGAN(object):
 
         self.br_initial = br_initial
         self.anneal_rate = anneal_rate
+        self.architecture = architecture
 
         self.y_dim = y_dim
         self.z_dim = z_dim
@@ -111,7 +112,10 @@ class DCGAN(object):
         if self.y_dim:
             n_bluffs = tf.to_int32(tf.multiply(self.bluffing_rate, self.batch_size))
             self.G = self.generator(self.z, self.y)
-            G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size - n_bluffs])
+            if self.architecture == 'dcgan' or self.architecture == 'wgan':
+                G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size - n_bluffs])
+            elif self.architecture == 'wgan-gp':
+                G_bluffed, self.G = tf.split(self.G, [n_bluffs, self.batch_size + n_bluffs])
             inputs = tf.concat([inputs, G_bluffed], axis=0)
             self.D, self.D_logits = \
                 self.discriminator(inputs, self.y, reuse=False)
@@ -139,12 +143,39 @@ class DCGAN(object):
             except:
                 return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, targets=y)
 
-        self.d_loss_real = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))
-        self.d_loss_fake = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
-        self.g_loss = tf.reduce_mean(
-            sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_)))
+        if self.architecture == 'dcgan':
+            self.d_loss_real = tf.reduce_mean(
+                sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))
+            self.d_loss_fake = tf.reduce_mean(
+                sigmoid_cross_entropy_with_logits(self.D_logits_, tf.zeros_like(self.D_)))
+            self.g_loss = tf.reduce_mean(
+                sigmoid_cross_entropy_with_logits(self.D_logits_, tf.ones_like(self.D_)))
+        elif self.architecture == 'wgan':
+            self.d_loss_real = -tf.reduce_mean(self.D_logits)
+            self.d_loss_fake = tf.reduce_mean(self.D_logits_)
+            self.g_loss = -tf.reduce_mean(self.D_logits_)
+        elif self.architecture == 'wgan-gp':
+            # TODO
+            # self.d_loss_real = -tf.reduce_mean(self.D_logits)
+            # self.d_loss_fake = tf.reduce_mean(self.D_logits_)
+            # self.g_loss = -tf.reduce_mean(self.D_logits_)
+
+            """
+            alpha = tf.random_uniform(
+                shape=[BATCH_SIZE, 1, 1],
+                minval=0.,
+                maxval=1.
+            )
+            fake_inputs, real_inputs = g, inputs
+            differences = fake_inputs - real_inputs
+            interpolates = real_inputs + (alpha*differences)
+            print interpolates.get_shape()
+            gradients = tf.gradients(discriminator(interpolates, reuse=True), [interpolates])[0]
+            print gradients.get_shape()
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2]))
+            gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+            d_loss += LAMBDA*gradient_penalty
+            """
 
         self.d_loss_real_sum = scalar_summary("d_loss_real", self.d_loss_real)
         self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
@@ -162,8 +193,18 @@ class DCGAN(object):
         self.saver = tf.train.Saver()
 
     def train(self, config):
-        d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
-            .minimize(self.d_loss, var_list=self.d_vars)
+        if self.architecture == 'dcgan':
+            d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+                .minimize(self.d_loss, var_list=self.d_vars)
+        elif self.architecture == 'wgan':
+            d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1)
+            gvs = d_optim.compute_gradients(self.d_loss, self.d_vars)
+            clippable_count = tf.reduce_sum([tf.reduce_sum(tf.cast(tf.logical_and(tf.less_equal(grad, 0.01), tf.greater_equal(grad, -0.01)), tf.float32)) for grad, _ in gvs])
+            clippable_count_sum = histogram_summary("clipped_count", clippable_count)
+            capped_gvs = [(tf.clip_by_value(grad, -0.01, 0.01), var) for grad, var in gvs]
+            d_optim = d_optim.apply_gradients(capped_gvs)
+        elif self.architecture == 'wgan-gp':
+            # TODO
         g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
             .minimize(self.g_loss, var_list=self.g_vars)
         try:
@@ -173,9 +214,15 @@ class DCGAN(object):
 
         self.g_sum = merge_summary([self.z_sum, self.d__sum,
                                     self.G_sum, self.d_loss_fake_sum, self.g_loss_sum])
-        self.d_sum = merge_summary(
-            [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
-        self.writer = SummaryWriter("./logs/{0}/bluff={1}_anneal={2}".format(self.dataset_name, self.br_initial, self.anneal_rate), self.sess.graph)
+        if self.architecture == 'dcgan':
+            self.d_sum = merge_summary(
+                [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
+        elif self.architecture == 'wgan':
+            self.d_sum = merge_summary(
+                [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum, clippable_count_sum])
+        elif self.architecture == 'wgan-gp':
+            # TODO
+        self.writer = SummaryWriter("./logs/{0}/arch={1}_bluff={2}_anneal={3}".format(self.dataset_name, self.architecture, self.br_initial, self.anneal_rate), self.sess.graph)
 
         sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
 
@@ -233,11 +280,18 @@ class DCGAN(object):
                     else:
                         batch_images = np.array(batch).astype(np.float32)
 
-                batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
-                    .astype(np.float32)
+                bluffing_rate = self.br_initial * np.exp(-self.anneal_rate * counter)
+                num_bluffs = int(bluffing_rate*config.batch_size)
+
+                if self.architecture == 'dcgan' or self.architecture == 'wgan':
+                    batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
+                        .astype(np.float32)
+                elif self.architecture == 'wgan-gp':
+                    # TODO
+                    batch_z = np.random.uniform(-1, 1, [config.batch_size + 2*num_bluffs, self.z_dim]) \
+                        .astype(np.float32)
 
                 # Update D network
-                bluffing_rate = self.br_initial * np.exp(-self.anneal_rate * counter)
                 _, summary_str = self.sess.run([d_optim, self.d_sum],
                                                feed_dict={
                                                    self.inputs: batch_images,
@@ -351,20 +405,25 @@ class DCGAN(object):
                     self.z_, [-1, s_h16, s_w16, self.gf_dim * 8])
                 h0 = tf.nn.relu(self.g_bn0(self.h0))
 
+                if self.architecture == 'dcgan' or self.architecture == 'wgan':
+                    n_bluffs = 0
+                elif self.architecture == 'wgan-gp':
+                    n_bluffs = tf.to_int32(tf.multiply(self.bluffing_rate, self.batch_size))
+
                 self.h1, self.h1_w, self.h1_b = deconv2d(
-                    h0, [self.batch_size, s_h8, s_w8, self.gf_dim * 4], name='g_h1', with_w=True)
+                    h0, [self.batch_size + 2*n_bluffs, s_h8, s_w8, self.gf_dim * 4], name='g_h1', with_w=True)
                 h1 = tf.nn.relu(self.g_bn1(self.h1))
 
                 h2, self.h2_w, self.h2_b = deconv2d(
-                    h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2], name='g_h2', with_w=True)
+                    h1, [self.batch_size + 2*n_bluffs, s_h4, s_w4, self.gf_dim * 2], name='g_h2', with_w=True)
                 h2 = tf.nn.relu(self.g_bn2(h2))
 
                 h3, self.h3_w, self.h3_b = deconv2d(
-                    h2, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_h3', with_w=True)
+                    h2, [self.batch_size + 2*n_bluffs, s_h2, s_w2, self.gf_dim * 1], name='g_h3', with_w=True)
                 h3 = tf.nn.relu(self.g_bn3(h3))
 
                 h4, self.h4_w, self.h4_b = deconv2d(
-                    h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_h4', with_w=True)
+                    h3, [self.batch_size + 2*n_bluffs, s_h, s_w, self.c_dim], name='g_h4', with_w=True)
 
                 return tf.nn.tanh(h4)
             else:
@@ -373,7 +432,7 @@ class DCGAN(object):
                 s_w2, s_w4 = int(s_w / 2), int(s_w / 4)
 
                 # yb = tf.expand_dims(tf.expand_dims(y, 1),2)
-                yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+                yb = tf.reshape(y, [self.batch_size + 2*n_bluffs, 1, 1, self.y_dim])
                 z = concat([z, y], 1)
 
                 h0 = tf.nn.relu(
@@ -382,16 +441,16 @@ class DCGAN(object):
 
                 h1 = tf.nn.relu(self.g_bn1(
                     linear(h0, self.gf_dim * 2 * s_h4 * s_w4, 'g_h1_lin')))
-                h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
+                h1 = tf.reshape(h1, [self.batch_size + 2*n_bluffs, s_h4, s_w4, self.gf_dim * 2])
 
                 h1 = conv_cond_concat(h1, yb)
 
                 h2 = tf.nn.relu(self.g_bn2(deconv2d(h1,
-                                                    [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
+                                                    [self.batch_size + 2*n_bluffs, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
                 h2 = conv_cond_concat(h2, yb)
 
                 return tf.nn.sigmoid(
-                    deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
+                    deconv2d(h2, [self.batch_size + 2*n_bluffs, s_h, s_w, self.c_dim], name='g_h3'))
 
     def sampler(self, z, y=None):
         with tf.variable_scope("generator") as scope:
