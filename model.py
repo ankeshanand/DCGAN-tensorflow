@@ -156,6 +156,7 @@ class DCGAN(object):
             self.g_loss = -tf.reduce_mean(self.D_logits_)
         elif self.architecture == 'wgan-gp':
             # TODO
+            pass
             # self.d_loss_real = -tf.reduce_mean(self.D_logits)
             # self.d_loss_fake = tf.reduce_mean(self.D_logits_)
             # self.g_loss = -tf.reduce_mean(self.D_logits_)
@@ -205,6 +206,7 @@ class DCGAN(object):
             d_optim = d_optim.apply_gradients(capped_gvs)
         elif self.architecture == 'wgan-gp':
             # TODO
+            pass
         g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
             .minimize(self.g_loss, var_list=self.g_vars)
         try:
@@ -222,6 +224,7 @@ class DCGAN(object):
                 [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum, clippable_count_sum])
         elif self.architecture == 'wgan-gp':
             # TODO
+            pass
         self.writer = SummaryWriter("./logs/{0}/arch={1}_bluff={2}_anneal={3}".format(self.dataset_name, self.architecture, self.br_initial, self.anneal_rate), self.sess.graph)
 
         sample_z = np.random.uniform(-1, 1, size=(self.sample_num, self.z_dim))
