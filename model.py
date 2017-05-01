@@ -109,6 +109,10 @@ class DCGAN(object):
         self.z_sum = histogram_summary("z", self.z)
         self.bluffing_rate = tf.Variable(self.br_initial, name="bluffing_rate")
 
+        self.num_bluffs_var = tf.placeholder(tf.float32, name="num_bluffs")
+        self.bluffing_rate_var = tf.placeholder(tf.float32, name="bluffing_rate")
+        self.bluff_summary_str = merge_summary([scalar_summary("num_bluffs", self.num_bluffs_var), scalar_summary("bluffing_rate", self.bluffing_rate_var)])
+
         if self.y_dim:
             n_bluffs = tf.to_int32(tf.multiply(self.bluffing_rate, self.batch_size))
             self.G = self.generator(self.z, self.y)
@@ -295,6 +299,7 @@ class DCGAN(object):
                             # TODO: This is sorta hardcoded
                             num_bluffs = min(0.5* config.batch_size, num_bluffs + 1)
                             bluffing_rate = num_bluffs * 1.0 / config.batch_size
+                        print 'Updated num_bluffs, bluffing_rate: ', num_bluffs, bluffing_rate
                 else:
                     bluffing_rate = self.br_initial * np.exp(-self.anneal_rate * counter)
                     num_bluffs = int(bluffing_rate*config.batch_size)
@@ -327,6 +332,10 @@ class DCGAN(object):
                 # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
                 _, summary_str = self.sess.run([g_optim, self.g_sum],
                                                feed_dict={self.z: batch_z, self.bluffing_rate: bluffing_rate})
+                self.writer.add_summary(summary_str, counter)
+
+                summary_str = self.sess.run(self.bluff_summary_str,
+                                               feed_dict={self.bluffing_rate_var: bluffing_rate, self.num_bluffs_var: num_bluffs})
                 self.writer.add_summary(summary_str, counter)
 
                 errD_fake = self.d_loss_fake.eval({
