@@ -248,6 +248,9 @@ class DCGAN(object):
                 sample_inputs = np.array(sample).astype(np.float32)
 
         counter = 1
+        prev_g_loss = curr_g_loss = 0.
+        num_bluffs = 0.5 * config.batch_size
+        bluffing_rate = self.br_initial
         start_time = time.time()
         could_load, checkpoint_counter = self.load(self.checkpoint_dir)
         if could_load:
@@ -283,8 +286,18 @@ class DCGAN(object):
                     else:
                         batch_images = np.array(batch).astype(np.float32)
 
-                bluffing_rate = self.br_initial * np.exp(-self.anneal_rate * counter)
-                num_bluffs = int(bluffing_rate*config.batch_size)
+                if self.anneal_rate == 'auto':
+                    if idx != 0 and idx % 1000 == 0:
+                        if prev_g_loss > curr_g_loss:
+                            num_bluffs = max(0, num_bluffs - 1)
+                            bluffing_rate = num_bluffs * 1.0 / config.batch_size
+                        elif prev_g_loss < curr_g_loss:
+                            # TODO: This is sorta hardcoded
+                            num_bluffs = min(0.5* config.batch_size, num_bluffs + 1)
+                            bluffing_rate = num_bluffs * 1.0 / config.batch_size
+                else:
+                    bluffing_rate = self.br_initial * np.exp(-self.anneal_rate * counter)
+                    num_bluffs = int(bluffing_rate*config.batch_size)
 
                 if self.architecture == 'dcgan' or self.architecture == 'wgan':
                     batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
@@ -331,6 +344,10 @@ class DCGAN(object):
                 print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
                       % (epoch, idx, batch_idxs,
                          time.time() - start_time, errD_fake + errD_real, errG))
+
+                if idx != 0 and idx % 1000 == 0:
+                    prev_g_loss = curr_g_loss
+                    curr_g_loss = errG
 
                 if np.mod(counter, 100) == 1:
                     try:
